@@ -12,3 +12,5 @@ build-broadcast:
 broadcast: build-broadcast
 	./maelstrom/maelstrom test -w broadcast --bin ./broadcast --time-limit 5 --log-stderr
 
+broadcast-high: build-broadcast
+	./maelstrom/maelstrom test -w broadcast --bin ./broadcast --time-limit 20 --rate 100

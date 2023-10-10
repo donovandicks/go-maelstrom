@@ -21,17 +21,16 @@ func NewBroadcastServer[T comparable]() *BroadcastServer[T] {
 		messages: utils.NewSet[T](),
 	}
 
-	node.On("topology", func(msg map[string]interface{}) {
+	node.On("topology", func(msg *Message) {
 		node.Log("registering node neighbors")
-		body := (msg["body"]).(map[string]interface{})
-		topo := (body["topology"].(map[string]interface{}))
+		topo := msg.Body["topology"].(map[string]interface{})
 
 		bcast.neighbors = topo[node.Id].([]interface{})
 		node.Log("received neighbors %v", bcast.neighbors)
 		node.Reply(msg, map[string]interface{}{"type": "topology_ok"})
 	})
 
-	node.On("read", func(msg map[string]interface{}) {
+	node.On("read", func(msg *Message) {
 		bcast.Lock()
 		defer bcast.Unlock()
 
@@ -41,9 +40,8 @@ func NewBroadcastServer[T comparable]() *BroadcastServer[T] {
 		})
 	})
 
-	node.On("broadcast", func(msg map[string]interface{}) {
-		body := (msg["body"]).(map[string]interface{})
-		m := body["message"].(T)
+	node.On("broadcast", func(msg *Message) {
+		m := msg.Body["message"].(T)
 
 		bcast.Lock()
 		// Only broadcast new messages
@@ -52,6 +50,11 @@ func NewBroadcastServer[T comparable]() *BroadcastServer[T] {
 
 			// Broadcast message to all neighbors
 			for _, neighbor := range bcast.neighbors {
+				if neighbor == msg.Source {
+					// Don't broadcast back to the source
+					continue
+				}
+
 				node.Send(neighbor.(string), map[string]interface{}{
 					"type":    "broadcast",
 					"message": m,
@@ -60,7 +63,7 @@ func NewBroadcastServer[T comparable]() *BroadcastServer[T] {
 		}
 		bcast.Unlock()
 
-		if _, ok := body["msg_id"]; ok {
+		if _, ok := msg.Body["msg_id"]; ok {
 			// Only reply to messages that have an ID, which are only ones
 			// from the controller and not from peers
 			node.Reply(msg, map[string]interface{}{"type": "broadcast_ok"})
